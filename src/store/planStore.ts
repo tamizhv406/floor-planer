@@ -15,7 +15,7 @@ import type { Camera } from '../canvas/camera'
 import { isViewOnly } from './viewOnly'
 import { deletePlan, movePlan, pruneSel, rotatePlan, selCenter, selSize, type Selection } from '../canvas/selection/model'
 
-export type Tool = 'select' | 'wall' | 'door' | 'window' | 'measure' | 'zone' | 'building'
+export type Tool = 'select' | 'wall' | 'door' | 'window' | 'measure' | 'zone' | 'building' | 'erase'
 export type DoorPreset = Exclude<OpeningPreset, 'window'>
 
 export type PlanState = {

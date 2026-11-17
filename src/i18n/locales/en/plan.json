@@ -241,7 +241,8 @@
       "door": "Door",
       "window": "Window",
       "zone": "Zone",
-      "building": "Building"
+      "building": "Building",
+      "erase": "Eraser"
     },
     "undo": "Undo",
     "undoTitle": "Undo (⌘Z)",

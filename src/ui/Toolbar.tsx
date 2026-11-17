@@ -8,6 +8,7 @@ import { LayersButton, lockedToast, stopEdit, useLayers, useNetworkEdit, wallsLo
 
 const tools: { id: Tool; key: string; icon: string }[] = [
   { id: 'select', key: 'V', icon: 'M5 3l14 8-6 1.5L10 19z' },
+  { id: 'erase', key: 'E', icon: 'M14.6 3.2a1.6 1.6 0 012.3 0l4 4a1.6 1.6 0 010 2.3L11.4 19H20v2H7.6l-4.4-4.4a1.6 1.6 0 010-2.3zM9.2 10.9l-4.6 4.6 3.9 3.9.1.1h1.8l3.7-3.7zM15.7 4.9l-5 5 4.8 4.8 5-5z' },
   { id: 'wall', key: 'W', icon: 'M3 9h18v6H3z' },
   { id: 'door', key: 'D', icon: 'M6 3h12v18H6zM8 5v16h8V5zM13 11h2v2h-2z' },
   { id: 'window', key: 'O', icon: 'M4 4h16v16H4zM6 6h5v5H6zM13 6h5v5h-5zM6 13h5v5H6zM13 13h5v5h-5z' },

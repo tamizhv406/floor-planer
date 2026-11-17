@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
-import { Circle, Layer, Line, Stage } from 'react-konva'
+import { Circle, Layer, Line, Rect, Stage } from 'react-konva'
 import type Konva from 'konva'
 import { useTranslation } from 'react-i18next'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { FurnitureSymbol2D } from '../furniture/Symbol2D'
 import { furnitureLayer, resolveFurniture } from '../furniture/catalog'
 import { snapToWalls } from '../furniture/wallSnap'
+import { eraseTarget, eraseTargetAt, type EraseTarget } from './eraser'
 import { duplicateFurniture, placeTemplate } from '../furniture/actions'
 import { roomTemplate } from '../furniture/templates'
 import {
@@ -94,12 +95,48 @@ const fitPadding = (el?: HTMLElement | null) => {
 const DEFAULT_CAM: Camera = { x: 0, y: 0, scale: 0.05 }
 const DRAG_THRESHOLD_PX = 3
 const WALL_SNAP_PX = 12
+/** Extra hit radius for the eraser, in screen px, so thin walls are easy to tap. */
+const ERASE_TOL_PX = 8
 const FUR_NODE_PREFIX = 'fur:'
 
 /**
  * Drop placement: if the drop point is within reach of a wall, turn the item so
  * its back (-d/2) faces that wall and pull it flush; otherwise keep it as is.
  */
+const ERASE_RED = '#e5484d'
+
+/** Red preview of what the eraser will delete under the pointer. */
+function EraseHighlight({ plan, target, scale }: { plan: Plan; target: EraseTarget; scale: number }) {
+  const common = { stroke: ERASE_RED, strokeWidth: 2 / scale, fill: 'rgba(229, 72, 77, 0.22)', listening: false }
+  if (target.kind === 'furniture') {
+    const f = plan.furniture.find((x) => x.id === target.id)
+    if (!f) return null
+    const { w, d } = resolveFurniture(f)
+    return <Rect {...common} x={f.x} y={f.y} offsetX={w / 2} offsetY={d / 2} width={w} height={d} rotation={f.rotationDeg} />
+  }
+  if (target.kind === 'walls' || target.kind === 'openings') {
+    const o = target.kind === 'openings' ? plan.openings.find((x) => x.id === target.id) : undefined
+    const wall = plan.walls.find((x) => x.id === (o ? o.wallId : target.id))
+    if (!wall) return null
+    const len = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y) || 1
+    const ux = (wall.b.x - wall.a.x) / len
+    const uy = (wall.b.y - wall.a.y) / len
+    const [s0, s1] = o ? [o.offset, o.offset + o.width] : [0, len]
+    return (
+      <Line
+        points={[wall.a.x + ux * s0, wall.a.y + uy * s0, wall.a.x + ux * s1, wall.a.y + uy * s1]}
+        stroke="rgba(229, 72, 77, 0.55)"
+        strokeWidth={wall.thickness + 4 / scale}
+        lineCap="butt"
+        listening={false}
+      />
+    )
+  }
+  const z = plan.site.zones?.find((x) => x.id === target.id)
+  if (!z) return null
+  return <Line {...common} points={z.polygon.flatMap((p) => [p.x, p.y])} closed />
+}
+
 function placeAgainstWall(walls: Plan['walls'], type: string, at: Point, tol: number): { x: number; y: number; rotationDeg: number } {
   const r = resolveFurniture({ type })
   let best: { dist: number; toward: Point } | null = null
@@ -239,6 +276,7 @@ export function PlanCanvas({ onCursor }: Props) {
   const viewOnly = useViewOnly()
   const rot = cam.rotation ?? 0
   const [cursor, setCursor] = useState<Snap | null>(null)
+  const [eraseHover, setEraseHover] = useState<EraseTarget | null>(null)
   const [draftStart, setDraftStart] = useState<Point | null>(null)
   const [shiftDown, setShiftDown] = useState(false)
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -488,6 +526,8 @@ export function PlanCanvas({ onCursor }: Props) {
         state.commit(updateOpening(state.plan, op.id, { hinge: op.hinge === 'end' ? 'start' : 'end' }))
       } else if (e.key === 'v' || e.key === 'м') {
         setTool('select')
+      } else if (e.key === 'e' || e.key === 'у') {
+        setTool('erase')
       } else if (e.key === 'd' || e.key === 'в') {
         setTool('door')
       } else if (e.key === 'o' || e.key === 'щ') {
@@ -776,6 +816,12 @@ export function PlanCanvas({ onCursor }: Props) {
       onCursor?.(raw, cam.scale)
       return
     }
+    if (tool === 'erase') {
+      const current = usePlanStore.getState().plan
+      const hit = current ? eraseTargetAt(current, raw, ERASE_TOL_PX / cam.scale, layerLocks()) : null
+      if (hit?.id !== eraseHover?.id || hit?.kind !== eraseHover?.kind) setEraseHover(hit)
+      return
+    }
     const walls = usePlanStore.getState().plan?.walls ?? []
     if (tool === 'zone') {
       const current = usePlanStore.getState().plan
@@ -1022,6 +1068,23 @@ export function PlanCanvas({ onCursor }: Props) {
     if (Date.now() < suppressClickUntil.current) return
     if ('button' in e.evt && e.evt.button !== 0) return
     setCtxMenu(null)
+    if (tool === 'erase') {
+      const raw = worldPointer()
+      const current = usePlanStore.getState().plan
+      if (!raw || !current || viewOnly) return
+      const tol = ERASE_TOL_PX / cam.scale
+      const hit = eraseTargetAt(current, raw, tol, layerLocks())
+      if (hit) {
+        selectWall(null)
+        commit(eraseTarget(current, hit))
+        setEraseHover(null)
+        return
+      }
+      // Nothing erasable here, but a locked layer has something: say why.
+      const lockedHit = eraseTargetAt(current, raw, tol, {})
+      if (lockedHit) lockedToast(lockedHit.kind === 'openings' ? 'walls' : lockedHit.kind)
+      return
+    }
     if (tool === 'zone') {
       const raw = worldPointer()
       const current = usePlanStore.getState().plan
@@ -1250,7 +1313,7 @@ export function PlanCanvas({ onCursor }: Props) {
           scaleX={cam.scale}
           scaleY={cam.scale}
           rotation={rot}
-          draggable={(tool === 'select' || tool === 'building') && !drag && !pinchRef.current && !marquee && !aligning}
+          draggable={(tool === 'select' || tool === 'building' || tool === 'erase') && !drag && !pinchRef.current && !marquee && !aligning}
           dragDistance={6}
           onDragStart={(e) => {
             if (e.target === stageRef.current) panRef.current = true
@@ -1586,6 +1649,7 @@ export function PlanCanvas({ onCursor }: Props) {
             <ElectricLayer plan={shown} scale={cam.scale} viewRot={rot} worldPointer={worldPointer} interactive={!viewOnly && !aligning && !drag && !locks.electric} />
           )}
           <Layer listening={false}>
+            {tool === 'erase' && eraseHover && shown && <EraseHighlight plan={shown} target={eraseHover} scale={cam.scale} />}
             {tool === 'zone' && zoneDraft.length > 0 && (
               <>
                 <Line

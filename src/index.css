@@ -58,7 +58,9 @@ a:hover {
 .plan-canvas--door,
 .plan-canvas--door:active,
 .plan-canvas--window,
-.plan-canvas--window:active {
+.plan-canvas--window:active,
+.plan-canvas--erase,
+.plan-canvas--erase:active {
   cursor: crosshair;
 }
 
