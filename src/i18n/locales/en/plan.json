@@ -63,7 +63,8 @@
     "moveY": "Move Y",
     "rotateDeg": "Rotate, °",
     "alignStreet": "Align parallel to street",
-    "hint": "Drag any selected object or the arrow handle below the frame to move the whole group (100 mm step). Arrow keys — 100 mm, Shift — 1 m. Drag a building corner from outside or the circle above the frame to rotate in 0.5° steps, snapping to axes and the street; Shift — 15°, Alt — around the opposite corner. [ and ] — 1°, Shift — 15°. Shift+click — add or remove, Shift+drag on empty space — select, ⌘A — all, Esc — clear."
+    "hint": "Drag any selected object or the arrow handle below the frame to move the whole group (100 mm step). Arrow keys — 100 mm, Shift — 1 m. Drag a building corner from outside or the circle above the frame to rotate in 0.5° steps, snapping to axes and the street; Shift — 15°, Alt — around the opposite corner. [ and ] — 1°, Shift — 15°. Shift+click — add or remove, Shift+drag on empty space — select, ⌘A — all, Esc — clear.",
+    "duplicateFurniture": "Duplicate furniture ({{count}})"
   },
   "opening": {
     "sill": "Sill height",
@@ -181,12 +182,22 @@
     "presets": "Presets",
     "resizeHint": "Drag edge or corner handles to resize (50 mm step, Shift — 10 mm). Alt keeps proportions; round items always do. Details such as armrests, chairs and treads keep their real size.",
     "keepRatio": "Keep proportions",
-    "resizeHintTouch": "Drag edge or corner handles to resize in 50 mm steps. Turn on Keep proportions to scale evenly; round items always do. Details such as armrests, chairs and treads keep their real size."
+    "resizeHintTouch": "Drag edge or corner handles to resize in 50 mm steps. Turn on Keep proportions to scale evenly; round items always do. Details such as armrests, chairs and treads keep their real size.",
+    "duplicate": "Duplicate",
+    "templates": {
+      "bedroom": "Bedroom set",
+      "living": "Living room set",
+      "dining": "Dining set",
+      "kitchen": "Kitchen with island",
+      "bathroom": "Bathroom set",
+      "office": "Home office"
+    }
   },
   "furniturePanel": {
     "eyebrow": "Catalog",
     "title": "Furniture",
-    "hint": "Drag onto the plan or click to place it at the screen center. R — rotate 90°."
+    "hint": "Drag onto the plan or click to place it at the screen center. Room sets are placed as a group: drag to move, corners to rotate. R — rotate 90°, Ctrl/⌘+D — duplicate.",
+    "templates": "Room sets"
   },
   "estimate": {
     "walls_one": "{{count}} wall, {{length}}",

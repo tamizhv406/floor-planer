@@ -1,7 +1,10 @@
 import { useTranslation } from 'react-i18next'
 import { FURNITURE_CATALOG, FURNITURE_CATEGORIES, resolveFurniture } from '../furniture/catalog'
-import { FurnitureIcon } from '../furniture/icons'
-import { toWorld } from '../canvas/camera'
+import { FurnitureIcon, TemplateIcon } from '../furniture/icons'
+import { placeTemplate, templateBounds } from '../furniture/actions'
+import { ROOM_TEMPLATES } from '../furniture/templates'
+import { emptySel } from '../canvas/selection/model'
+import { toWorld, type Camera } from '../canvas/camera'
 import { addFurniture, distanceToSegment, snapOffset, type Plan, type Point } from '../model'
 import { usePlanStore } from '../store/planStore'
 import { useViewOnly } from '../store/viewOnly'
@@ -27,6 +30,13 @@ function freeSpot(plan: Plan, center: Point, w: number, d: number): Point {
   return center
 }
 
+/** Centre of the visible canvas; on phones the upper part, above the bottom sheet. */
+function visibleCenter(plan: Plan, cam: Camera | null): Point {
+  return cam
+    ? toWorld(cam, { x: window.innerWidth / 2, y: window.innerHeight * (window.innerWidth <= 760 ? 0.3 : 0.5) })
+    : { x: plan.site.width / 2, y: plan.site.depth / 2 }
+}
+
 export function FurniturePanel() {
   const { t } = useTranslation('plan')
   const open = usePlanStore((s) => s.furniturePanel)
@@ -37,15 +47,25 @@ export function FurniturePanel() {
   const place = (type: string) => {
     const { plan, cam, commit, selectFurniture, setTool } = usePlanStore.getState()
     if (!plan) return
-    const center = cam
-      ? toWorld(cam, { x: window.innerWidth / 2, y: window.innerHeight * (window.innerWidth <= 760 ? 0.3 : 0.5) })
-      : { x: plan.site.width / 2, y: plan.site.depth / 2 }
+    const center = visibleCenter(plan, cam)
     const size = resolveFurniture({ type })
     const at = freeSpot(plan, center, size.w, size.d)
     const res = addFurniture(plan, { type, x: snapOffset(at.x), y: snapOffset(at.y), rotationDeg: 0 })
     commit(res.plan)
     setTool('select')
     selectFurniture(res.id)
+    setOpen(false)
+  }
+
+  const placeSet = (id: string) => {
+    const { plan, cam, commit, setGroup, setTool } = usePlanStore.getState()
+    const tpl = ROOM_TEMPLATES.find((x) => x.id === id)
+    if (!plan || !tpl) return
+    const res = placeTemplate(plan, tpl, visibleCenter(plan, cam))
+    commit(res.plan)
+    setTool('select')
+    // Selected as a group, so the whole set moves and rotates together.
+    setGroup({ ...emptySel(), furniture: res.ids })
     setOpen(false)
   }
 
@@ -63,6 +83,30 @@ export function FurniturePanel() {
       }
       footer={<span className="muted">{t('furniturePanel.hint')}</span>}
     >
+      <section className="furniture-panel__group">
+        <div className="eyebrow">{t('furniturePanel.templates')}</div>
+        <div className="furniture-panel__grid">
+          {ROOM_TEMPLATES.map((tpl) => {
+            const b = templateBounds(tpl)
+            return (
+              <button
+                key={tpl.id}
+                className="furniture-panel__item"
+                draggable
+                title={`${tpl.name}, ${(b.x1 - b.x0) / 1000}×${(b.y1 - b.y0) / 1000} m`}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/x-room-template', tpl.id)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
+                onClick={() => placeSet(tpl.id)}
+              >
+                <TemplateIcon template={tpl} size={40} />
+                <span className="furniture-panel__name">{tpl.name}</span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
       {FURNITURE_CATEGORIES.map((c) => {
         const items = FURNITURE_CATALOG.filter((d) => d.category === c.id)
         if (items.length === 0) return null

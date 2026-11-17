@@ -6,6 +6,8 @@ import type { KonvaEventObject } from 'konva/lib/Node'
 import { FurnitureSymbol2D } from '../furniture/Symbol2D'
 import { furnitureLayer, resolveFurniture } from '../furniture/catalog'
 import { snapToWalls } from '../furniture/wallSnap'
+import { duplicateFurniture, placeTemplate } from '../furniture/actions'
+import { roomTemplate } from '../furniture/templates'
 import {
   addFurniture,
   addZone,
@@ -56,7 +58,7 @@ import { detectRooms, pointInPolygon, type RoomFace } from '../stats/rooms'
 import { showToast } from '../ui/Toast'
 import { useUnderlayAlign, type UnderlayAlign } from '../map/useUnderlayAlign'
 import { Grid } from './Grid'
-import { FurnitureHandles, FurnitureRotateHandle, Handles, OpeningHandles, type FurnitureResizeHandleKind, type HandleKind } from './Handles'
+import { FurnitureHandles, Handles, OpeningHandles, type FurnitureResizeHandleKind, type HandleKind } from './Handles'
 import { labelAnchor, LengthLabel } from './LengthLabel'
 import { Dimensions } from './Dimensions'
 import { OpeningShape } from './OpeningShape'
@@ -358,6 +360,22 @@ export function PlanCanvas({ onCursor }: Props) {
         e.preventDefault()
         st.setTool('select')
         st.setGroup(withoutLocked(selectAll(st.plan), layerLocks()))
+        return
+      }
+      if (mod && (e.key === 'd' || e.key === 'D' || e.key === 'в' || e.key === 'В') && !isViewOnly()) {
+        // Duplicate the selected furniture (single item or the furniture in a group).
+        const st = usePlanStore.getState()
+        const ids = st.group?.furniture.length ? st.group.furniture : st.selectedFurnitureId ? [st.selectedFurnitureId] : []
+        if (!st.plan || ids.length === 0) return
+        e.preventDefault()
+        if (layerLocks().furniture) {
+          lockedToast('furniture')
+          return
+        }
+        const res = duplicateFurniture(st.plan, ids)
+        st.commit(res.plan)
+        if (res.ids.length === 1) st.selectFurniture(res.ids[0])
+        else st.setGroup({ ...emptySel(), furniture: res.ids })
         return
       }
       if (mod) return
@@ -1177,16 +1195,17 @@ export function PlanCanvas({ onCursor }: Props) {
           showToast(t('canvas.moveHouseHint'))
       }}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('text/x-furniture')) {
+        if (e.dataTransfer.types.includes('text/x-furniture') || e.dataTransfer.types.includes('text/x-room-template')) {
           e.preventDefault()
           e.dataTransfer.dropEffect = 'copy'
         }
       }}
       onDrop={(e) => {
         const type = e.dataTransfer.getData('text/x-furniture')
+        const setId = e.dataTransfer.getData('text/x-room-template')
         const stage = stageRef.current
         const current = usePlanStore.getState().plan
-        if (!type || !stage || !current) return
+        if ((!type && !setId) || !stage || !current) return
         e.preventDefault()
         if (layerLocks().furniture) {
           lockedToast('furniture')
@@ -1195,6 +1214,14 @@ export function PlanCanvas({ onCursor }: Props) {
         stage.setPointersPositions(e.nativeEvent)
         const p = stage.getRelativePointerPosition()
         if (!p) return
+        const tpl = setId ? roomTemplate(setId) : undefined
+        if (tpl) {
+          const res = placeTemplate(current, tpl, p)
+          commit(res.plan)
+          setTool('select')
+          usePlanStore.getState().setGroup({ ...emptySel(), furniture: res.ids })
+          return
+        }
         const placed = placeAgainstWall(current.walls, type, { x: snapOffset(p.x), y: snapOffset(p.y) }, WALL_SNAP_PX / cam.scale)
         const res = addFurniture(current, { type, ...placed })
         commit(res.plan)

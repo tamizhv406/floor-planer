@@ -1,5 +1,7 @@
 import { memo, useMemo, type ReactNode, type SVGProps } from 'react'
-import { resolveFurniture } from './catalog'
+import { furnitureLayer, resolveFurniture } from './catalog'
+import { templateBounds } from './actions'
+import type { RoomTemplate } from './templates'
 import { furnitureSymbol, SYMBOL_STYLE, type FillKind, type Prim, type StrokeKind } from './symbols'
 
 export type FurnitureIconProps = Omit<SVGProps<SVGSVGElement>, 'type'> & {
@@ -67,6 +69,33 @@ export const FurnitureIcon = memo(function FurnitureIcon({ type, size = 40, pad 
       {...rest}
     >
       {prims.map((p, i) => prim(p, i))}
+    </svg>
+  )
+})
+
+export type TemplateIconProps = Omit<SVGProps<SVGSVGElement>, 'type'> & { template: RoomTemplate; size?: number }
+
+/** Mini plan of a whole room set, drawn from the same symbols as the canvas. */
+export const TemplateIcon = memo(function TemplateIcon({ template, size = 56, ...rest }: TemplateIconProps) {
+  const { body, box } = useMemo(() => {
+    const b = templateBounds(template)
+    const layered = [...template.items].sort((a, c) => furnitureLayer(a.type) - furnitureLayer(c.type))
+    const body = layered.map((i, k) => {
+      const r = resolveFurniture(i)
+      return (
+        <g key={k} transform={`translate(${i.x} ${i.y}) rotate(${i.rotationDeg ?? 0})`}>
+          {furnitureSymbol(i.type, r.w, r.d).map((p, j) => prim(p, j))}
+        </g>
+      )
+    })
+    return { body, box: b }
+  }, [template])
+  const side = Math.max(box.x1 - box.x0, box.y1 - box.y0) * 1.08
+  const cx = (box.x0 + box.x1) / 2
+  const cy = (box.y0 + box.y1) / 2
+  return (
+    <svg width={size} height={size} viewBox={`${cx - side / 2} ${cy - side / 2} ${side} ${side}`} role="img" aria-hidden {...rest}>
+      {body}
     </svg>
   )
 })

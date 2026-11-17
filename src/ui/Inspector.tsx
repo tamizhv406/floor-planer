@@ -36,7 +36,8 @@ import {
 import { usePlanStore } from '../store/planStore'
 import { useViewOnly } from '../store/viewOnly'
 import { resolveFurniture } from '../furniture/catalog'
-import { buildingSel, selSummary, streetAlignDeg, type Selection } from '../canvas/selection/model'
+import { buildingSel, emptySel, selSummary, streetAlignDeg, type Selection } from '../canvas/selection/model'
+import { duplicateFurniture } from '../furniture/actions'
 import { PlanSummary as StatsSummary } from '../stats'
 import { Badge } from './Badge'
 import { Button } from './Button'
@@ -310,6 +311,20 @@ function GroupInspector({ plan, group }: { plan: Plan; group: Selection }) {
       {street !== null && street !== 0 && (
         <Button size="sm" onClick={() => rotateGroup(street)}>
           {t('group.alignStreet')}
+        </Button>
+      )}
+      {group.furniture.length > 0 && (
+        <Button
+          size="sm"
+          title="Ctrl/⌘ + D"
+          onClick={() => {
+            const st = usePlanStore.getState()
+            const res = duplicateFurniture(st.plan ?? plan, group.furniture)
+            st.commit(res.plan)
+            setGroup({ ...emptySel(), furniture: res.ids })
+          }}
+        >
+          {t('group.duplicateFurniture', { count: group.furniture.length })}
         </Button>
       )}
       <Button variant="danger" className="inspector__delete" onClick={deleteGroup}>
@@ -712,6 +727,18 @@ function FurnitureInspector({ plan, item }: { plan: Plan; item: Furniture }) {
       <div className="inspector__actions">
         <Button size="sm" onClick={() => set({ rotationDeg: normalizeDeg(item.rotationDeg + 90) })}>
           {t('furniture.rotate90')}
+        </Button>
+        <Button
+          size="sm"
+          title="Ctrl/⌘ + D"
+          onClick={() => {
+            const st = usePlanStore.getState()
+            const res = duplicateFurniture(st.plan ?? plan, [item.id])
+            st.commit(res.plan)
+            if (res.ids[0]) st.selectFurniture(res.ids[0])
+          }}
+        >
+          {t('furniture.duplicate')}
         </Button>
         <Button size="sm" variant="danger" onClick={() => commit(deleteFurniture(plan, item.id))}>
           {t('delete')}

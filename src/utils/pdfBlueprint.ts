@@ -46,7 +46,6 @@ export async function exportPdfBlueprint(): Promise<boolean> {
     // Divide title block into 3 columns
     const col1W = 105
     const col2W = 95
-    const col3W = tbW - col1W - col2W
 
     doc.line(margin + col1W, tbY, margin + col1W, tbY + titleBlockH)
     doc.line(margin + col1W + col2W, tbY, margin + col1W + col2W, tbY + titleBlockH)
