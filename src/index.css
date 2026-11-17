@@ -64,6 +64,24 @@ a:hover {
   cursor: crosshair;
 }
 
+.wall-done {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 5;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+@media (max-width: 760px) {
+  .wall-done {
+    /* above the bottom toolbar and the wall-material bar */
+    bottom: 190px;
+    min-height: 44px;
+    padding: 0 22px;
+  }
+}
+
 .plan-canvas--dragging,
 .plan-canvas--dragging:active {
   cursor: move;

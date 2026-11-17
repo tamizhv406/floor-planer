@@ -6,7 +6,7 @@ import type { KonvaEventObject } from 'konva/lib/Node'
 import { FurnitureSymbol2D } from '../furniture/Symbol2D'
 import { furnitureLayer, resolveFurniture } from '../furniture/catalog'
 import { snapToWalls } from '../furniture/wallSnap'
-import { eraseTarget, eraseTargetAt, type EraseTarget } from './eraser'
+import { eraseTarget, eraseTargetAt, sameTarget, type EraseTarget } from './eraser'
 import { duplicateFurniture, placeTemplate } from '../furniture/actions'
 import { roomTemplate } from '../furniture/templates'
 import {
@@ -121,7 +121,7 @@ function EraseHighlight({ plan, target, scale }: { plan: Plan; target: EraseTarg
     const len = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y) || 1
     const ux = (wall.b.x - wall.a.x) / len
     const uy = (wall.b.y - wall.a.y) / len
-    const [s0, s1] = o ? [o.offset, o.offset + o.width] : [0, len]
+    const [s0, s1] = o ? [o.offset, o.offset + o.width] : (target.span ?? [0, len])
     return (
       <Line
         points={[wall.a.x + ux * s0, wall.a.y + uy * s0, wall.a.x + ux * s1, wall.a.y + uy * s1]}
@@ -312,6 +312,10 @@ export function PlanCanvas({ onCursor }: Props) {
   const panRef = useRef(false)
   const suppressClickUntil = useRef(0)
   const wallDragStartRef = useRef<Point | null>(null)
+  // Touch wall drawing: a finger drag draws one wall from where it starts.
+  const wallTouchRef = useRef<{ start: Point; screen: Point; moved: boolean } | null>(null)
+  const lastTapAt = useRef(0)
+  const skipWallClick = useRef(false)
   const middlePanRef = useRef<{ x: number; y: number; camX: number; camY: number } | null>(null)
 
   useEffect(() => {
@@ -753,12 +757,33 @@ export function PlanCanvas({ onCursor }: Props) {
 
   const pinchRef = useRef<{ dist: number; center: Point } | null>(null)
 
+  const onStageTouchStart = (e: KonvaEventObject<TouchEvent>) => {
+    wallTouchRef.current = null
+    if (tool !== 'wall' || viewOnly || e.evt.touches.length !== 1 || e.target !== stageRef.current || layerLocks().walls) return
+    const raw = worldPointer()
+    const sp = screenPointer()
+    const current = usePlanStore.getState().plan
+    if (!raw || !sp || !current) return
+    wallTouchRef.current = { start: snapPoint(raw, current.walls, cam.scale, null, false).point, screen: sp, moved: false }
+  }
+
   const onTouchMove = (e: KonvaEventObject<TouchEvent>) => {
     const touches = e.evt.touches
     if (touches.length < 2) {
+      const wt = wallTouchRef.current
+      if (wt && !wt.moved) {
+        const sp = screenPointer()
+        if (sp && Math.hypot(sp.x - wt.screen.x, sp.y - wt.screen.y) > 8) {
+          // A drag (not a tap): preview the wall from the finger's start point.
+          wt.moved = true
+          setDraftStart(wt.start)
+        }
+      }
       if (!pinchRef.current) onMouseMove(e)
       return
     }
+    if (wallTouchRef.current?.moved) setDraftStart(null)
+    wallTouchRef.current = null
     e.evt.preventDefault()
     const stage = stageRef.current
     if (!stage) return
@@ -783,10 +808,26 @@ export function PlanCanvas({ onCursor }: Props) {
   }
 
   const onTouchEnd = (e: KonvaEventObject<TouchEvent>) => {
+    const wt = wallTouchRef.current
+    if (wt && e.evt.touches.length === 0) {
+      wallTouchRef.current = null
+      if (wt.moved) {
+        // Konva fires `tap` right after this touchend; the drag already drew the wall.
+        suppressClickUntil.current = Date.now() + 400
+        const raw = worldPointer()
+        const current = usePlanStore.getState().plan
+        if (raw && current) {
+          const end = snapPoint(raw, current.walls, cam.scale, wt.start, shiftDown).point
+          if (Math.hypot(end.x - wt.start.x, end.y - wt.start.y) >= 200) addWall(wt.start, end)
+        }
+        // On touch every drag is one wall; the next drag starts fresh.
+        setDraftStart(null)
+        setCursor(null)
+      }
+    }
     if (e.evt.touches.length < 2 && pinchRef.current) {
       pinchRef.current = null
       suppressClickUntil.current = Date.now() + 500
-      panRef.current = true
     }
   }
 
@@ -819,7 +860,7 @@ export function PlanCanvas({ onCursor }: Props) {
     if (tool === 'erase') {
       const current = usePlanStore.getState().plan
       const hit = current ? eraseTargetAt(current, raw, ERASE_TOL_PX / cam.scale, layerLocks()) : null
-      if (hit?.id !== eraseHover?.id || hit?.kind !== eraseHover?.kind) setEraseHover(hit)
+      if (!sameTarget(hit, eraseHover)) setEraseHover(hit)
       return
     }
     const walls = usePlanStore.getState().plan?.walls ?? []
@@ -1138,11 +1179,16 @@ export function PlanCanvas({ onCursor }: Props) {
       }
       return
     }
+    if (skipWallClick.current) {
+      skipWallClick.current = false
+      return
+    }
     const raw = worldPointer()
     if (!raw || !plan) return
     const snap = snapPoint(raw, plan.walls, cam.scale, draftStart, e.evt.shiftKey || shiftDown)
     if (!draftStart) {
       setDraftStart(snap.point)
+      setCursor(snap)
       return
     }
     if (snap.point.x === draftStart.x && snap.point.y === draftStart.y) {
@@ -1151,6 +1197,7 @@ export function PlanCanvas({ onCursor }: Props) {
     }
     addWall(draftStart, snap.point)
     setDraftStart(snap.kind === 'endpoint' ? null : snap.point)
+    setCursor(snap)
   }
 
   const applyLength = () => {
@@ -1322,10 +1369,17 @@ export function PlanCanvas({ onCursor }: Props) {
             if (e.target === stageRef.current) setCam({ ...cam, x: e.target.x(), y: e.target.y() })
           }}
           onDragEnd={(e) => {
-            if (e.target === stageRef.current) setCam({ ...cam, x: e.target.x(), y: e.target.y() })
+            if (e.target !== stageRef.current) return
+            setCam({ ...cam, x: e.target.x(), y: e.target.y() })
+            // A mouse pan is followed by a click within milliseconds; a touch pan
+            // by none. A short window (not a flag left set) keeps the next real
+            // tap from being swallowed after panning on a phone.
+            panRef.current = false
+            suppressClickUntil.current = Date.now() + 250
           }}
           onWheel={onWheel}
           onMouseMove={onMouseMove}
+          onTouchStart={onStageTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
           onMouseDown={(e) => {
@@ -1389,6 +1443,11 @@ export function PlanCanvas({ onCursor }: Props) {
                   addWall(draftStart, snap.point)
                   setDraftStart(snap.kind === 'endpoint' ? null : snap.point)
                   suppressClickUntil.current = Date.now() + 300
+                } else {
+                  // A plain click: the press already set the start point. Skip
+                  // exactly the click that follows, which would otherwise see
+                  // "same point" and cancel it (click-click drawing never started).
+                  skipWallClick.current = true
                 }
               }
               wallDragStartRef.current = null
@@ -1399,8 +1458,17 @@ export function PlanCanvas({ onCursor }: Props) {
             if (!drag) setCursor(null)
             onCursor?.(null, cam.scale)
           }}
-          onClick={onStageClick}
-          onTap={onStageClick}
+          onClick={(e) => {
+            // Phones send a synthetic mouse click right after a tap. Handling
+            // both ran every tap twice (wall taps cancelled themselves, the
+            // eraser deleted two layers), so a click just after a tap is ignored.
+            if (Date.now() - lastTapAt.current < 700) return
+            onStageClick(e)
+          }}
+          onTap={(e) => {
+            lastTapAt.current = Date.now()
+            onStageClick(e)
+          }}
           onDblClick={() => {
             setDraftStart(null)
             if (tool !== 'select' || viewOnly) return
@@ -1677,7 +1745,19 @@ export function PlanCanvas({ onCursor }: Props) {
             {tool !== 'measure' && measures.length > 0 && (
               <MeasureLayer measures={measures} active={null} cursor={null} scale={cam.scale} viewRot={rot} />
             )}
-            {tool === 'wall' && draftStart && cursorPoint && (
+            {tool === 'wall' && draftStart && (
+              <Circle
+                name="wall-draft-start"
+                x={draftStart.x}
+                y={draftStart.y}
+                radius={6 / cam.scale}
+                fill={canvasTheme.accent}
+                stroke="#ffffff"
+                strokeWidth={2 / cam.scale}
+                listening={false}
+              />
+            )}
+            {tool === 'wall' && draftStart && cursorPoint && (cursorPoint.x !== draftStart.x || cursorPoint.y !== draftStart.y) && (
               <>
                 <Line
                   points={[draftStart.x, draftStart.y, cursorPoint.x, cursorPoint.y]}
@@ -1838,6 +1918,18 @@ export function PlanCanvas({ onCursor }: Props) {
           />
           <span className="length-edit__unit">{t('units.m')}</span>
         </form>
+      )}
+      {tool === 'wall' && draftStart && !viewOnly && (
+        <button
+          type="button"
+          className="btn btn--sm btn--primary wall-done"
+          onClick={() => {
+            setDraftStart(null)
+            setCursor(null)
+          }}
+        >
+          ✓ {t('plan:toolbar.finishWall')}
+        </button>
       )}
     </div>
   )

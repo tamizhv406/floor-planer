@@ -268,7 +268,8 @@
     "alignTitle": "Align the image to the site: move and rotate · Esc — exit",
     "opacityTitle": "Image opacity: {{pct}}%",
     "clickWall": "click a wall",
-    "noMaterial": "No material, 200 mm"
+    "noMaterial": "No material, 200 mm",
+    "finishWall": "Done"
   },
   "summary": {
     "buildingKinds": {

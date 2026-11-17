@@ -276,7 +276,8 @@
     "alignTitle": "Выровнять снимок по участку: сдвиг и поворот · Esc — выйти",
     "opacityTitle": "Непрозрачность снимка: {{pct}}%",
     "clickWall": "клик по стене",
-    "noMaterial": "Без материала, 200 мм"
+    "noMaterial": "Без материала, 200 мм",
+    "finishWall": "Готово"
   },
   "summary": {
     "buildingKinds": {

@@ -117,7 +117,7 @@ const ids = (page) => store(page, `return { f: st.plan.furniture.map((x) => x.id
   await ph.emulate({ viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, userAgent: 'Mozilla/5.0 (Linux; Android 14) Mobile' })
   ph.on('pageerror', (e) => errors.push(String(e)))
   await setup(ph)
-  await store(ph, `st.setTool('erase')`)
+  await store(ph, `st.commit({ ...st.plan, site: { ...st.plan.site, zones: [{ id: 'lawn', name: 'Lawn', kind: 'lawn', polygon: [{ x: -2000, y: -2000 }, { x: 8000, y: -2000 }, { x: 8000, y: 8000 }, { x: -2000, y: 8000 }] }] } }); st.setTool('erase')`)
   await wait(300)
   const cdp = await ph.createCDPSession()
   const tap = async (pt) => {
@@ -140,7 +140,58 @@ const ids = (page) => store(page, `return { f: st.plan.furniture.map((x) => x.id
   await tap(p)
   s = await ids(ph)
   check('phone: tap sofa → deleted', !s.f.includes('sofa'), JSON.stringify(s.f))
+  const zonesLeft = await store(ph, `return (st.plan.site.zones || []).map((z) => z.id)`)
+  check('phone: one tap deletes one thing (lawn under the sofa stays)', zonesLeft.includes('lawn'), JSON.stringify(zonesLeft))
   await ph.screenshot({ path: require('path').join(__dirname, '..', 'test-screenshots', 'eraser-phone.png') })
+
+  // ---------- Trim: only the stretch between crossings goes ----------
+  const tp = await browser.newPage()
+  await tp.setViewport({ width: 1400, height: 900 })
+  tp.on('pageerror', (e) => errors.push(String(e)))
+  await setup(tp)
+  await store(tp, `
+    const wall = (id, a, b) => ({ id, a, b, thickness: 200, height: 2800 })
+    st.commit({ ...st.plan, furniture: [], openings: [{ id: 'd1', wallId: 'top', type: 'door', offset: 1000, width: 900, height: 2000, sill: 0, hinge: 'start', side: 'right' }],
+      walls: [
+        wall('top', { x: 0, y: 0 }, { x: 6000, y: 0 }),            // overshoots the right corner by 1 m
+        wall('right', { x: 5000, y: 0 }, { x: 5000, y: 4000 }),
+        wall('bottom', { x: 5000, y: 4000 }, { x: 0, y: 4000 }),
+        wall('left', { x: 0, y: 4000 }, { x: 0, y: 0 }),
+        wall('cross', { x: 2500, y: -1500 }, { x: 2500, y: 5500 }), // crosses the whole box
+      ] })
+    st.setTool('erase')
+  `)
+  await wait(400)
+  const wallsNow = () => store(tp, `return Object.fromEntries(st.plan.walls.map((w) => [w.id, [w.a.x, w.a.y, w.b.x, w.b.y].map(Math.round).join(',')]))`)
+  // Erase the 1 m overshoot of the top wall.
+  let q = await toScreen(tp, { x: 5600, y: 0 })
+  await tp.mouse.click(q.x, q.y)
+  await wait(300)
+  let W = await wallsNow()
+  let ops = await store(tp, `return st.plan.openings.map((o) => o.wallId + '@' + o.offset)`)
+  check('trim: erasing an overshoot removes only that piece', W.top === '0,0,5000,0' && W.right === '0,0,0,0'.replace('0,0,0,0', '5000,0,5000,4000') && Object.keys(W).length === 5, JSON.stringify(W))
+  check('trim: door on the trimmed wall stays', ops.includes('top@1000'), JSON.stringify(ops))
+  // Erase the part of the crossing wall that sticks out above the box.
+  q = await toScreen(tp, { x: 2500, y: -800 })
+  await tp.mouse.click(q.x, q.y)
+  await wait(300)
+  W = await wallsNow()
+  check('trim: outside part of a crossing wall goes, inside part stays', W.cross === '2500,0,2500,5500', JSON.stringify(W.cross))
+  // Erase the middle of the top wall between the left corner and the crossing (has the door): splits nothing on the right.
+  q = await toScreen(tp, { x: 600, y: 0 })
+  await tp.mouse.click(q.x, q.y)
+  await wait(300)
+  W = await wallsNow()
+  ops = await store(tp, `return st.plan.openings.map((o) => o.wallId + '@' + o.offset)`)
+  const pieceRight = Object.entries(W).find(([id, v]) => v === '2500,0,5000,0')
+  check('trim: middle stretch removed, right piece kept as a wall, door in the stretch removed', !!pieceRight && !Object.values(W).includes('0,0,5000,0') && ops.length === 0, JSON.stringify(W))
+  // A wall with no crossings is still deleted whole.
+  q = await toScreen(tp, { x: 0, y: 2000 })
+  await tp.mouse.click(q.x, q.y)
+  await wait(300)
+  W = await wallsNow()
+  check('trim: a plain wall between two corners is deleted whole', !('left' in W), JSON.stringify(Object.keys(W)))
+  await tp.close()
 
   check('no JS errors', errors.length === 0, errors.slice(0, 2).join(' | '))
   console.log(res.join('\n'))
