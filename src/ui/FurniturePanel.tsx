@@ -93,7 +93,7 @@ export function FurniturePanel() {
                 key={tpl.id}
                 className="furniture-panel__item"
                 draggable
-                title={`${tpl.name}, ${(b.x1 - b.x0) / 1000}×${(b.y1 - b.y0) / 1000} m`}
+                title={`${tpl.name}, ${((b.x1 - b.x0) / 1000).toFixed(1)}×${((b.y1 - b.y0) / 1000).toFixed(1)} m`}
                 onDragStart={(e) => {
                   e.dataTransfer.setData('text/x-room-template', tpl.id)
                   e.dataTransfer.effectAllowed = 'copy'

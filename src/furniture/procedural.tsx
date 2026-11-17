@@ -1,5 +1,5 @@
 import { RoundedBox } from '@react-three/drei'
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { finishMaterial, type Finish, type FurnitureLook } from './materials3d'
 
@@ -315,6 +315,8 @@ function Extruded({ pts, h, y = 0, f, paint }: { pts: [number, number][]; h: num
     const shape = new THREE.Shape(pts.map(([x, py]) => new THREE.Vector2(x * M, -py * M)))
     return new THREE.ExtrudeGeometry(shape, { depth: h * M, bevelEnabled: false })
   }, [pts, h])
+  // Free the old GPU buffers when the item is resized or removed.
+  useEffect(() => () => geo.dispose(), [geo])
   return <mesh geometry={geo} position={[0, y * M, 0]} rotation={[-Math.PI / 2, 0, 0]} material={mat(paint, f)} castShadow receiveShadow />
 }
 

@@ -947,11 +947,22 @@ export function PlanCanvas({ onCursor }: Props) {
   useEffect(() => {
     if (!drag) return
     const up = () => finishDrag()
+    // The OS can cancel a touch (notification shade, incoming call, palm
+    // rejection). Without this the drag stayed active and the next unrelated
+    // finger move kept dragging the item. Discard the gesture instead.
+    const cancel = () => {
+      setGroupInfo(null)
+      setDrag(null)
+      setPreview(null)
+      setCursor(null)
+    }
     window.addEventListener('mouseup', up)
     window.addEventListener('touchend', up)
+    window.addEventListener('touchcancel', cancel)
     return () => {
       window.removeEventListener('mouseup', up)
       window.removeEventListener('touchend', up)
+      window.removeEventListener('touchcancel', cancel)
     }
   }, [drag, finishDrag])
 
