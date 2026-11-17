@@ -40,6 +40,7 @@ import { buildingSel, selSummary, streetAlignDeg, type Selection } from '../canv
 import { PlanSummary as StatsSummary } from '../stats'
 import { Badge } from './Badge'
 import { Button } from './Button'
+import { Checkbox } from './Checkbox'
 import { IconButton } from './IconButton'
 import { Input } from './Input'
 import { LengthField } from './LengthField'
@@ -561,9 +562,13 @@ function FurnitureInspector({ plan, item }: { plan: Plan; item: Furniture }) {
   const isBed = !presets && item.type.startsWith('bed')
   const isTable = !presets && !lockAspect && (item.type.includes('desk') || item.type.includes('dining') || item.type.includes('table'))
   const isSofa = !presets && item.type.startsWith('sofa')
-  // Round items keep W = D: editing one dimension scales the other.
-  const setW = (w: number) => set(lockAspect ? { w, d: Math.round((w * r.d) / r.w) } : { w })
-  const setD = (d: number) => set(lockAspect ? { d, w: Math.round((d * r.w) / r.d) } : { d })
+  const keepRatio = usePlanStore((s) => s.keepRatio)
+  const setKeepRatio = usePlanStore((s) => s.setKeepRatio)
+  const ratioLocked = lockAspect || keepRatio
+  const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
+  // Round items (and the Keep proportions toggle) keep the W:D ratio: editing one dimension scales the other.
+  const setW = (w: number) => set(ratioLocked ? { w, d: Math.round((w * r.d) / r.w) } : { w })
+  const setD = (d: number) => set(ratioLocked ? { d, w: Math.round((d * r.w) / r.d) } : { d })
 
   return (
     <aside className="inspector card">
@@ -588,6 +593,13 @@ function FurnitureInspector({ plan, item }: { plan: Plan; item: Furniture }) {
           <span>{t('height')} (H)</span>
           <LengthField value={r.h} min={50} step={50} showSteppers onCommit={(h) => set({ h })} />
         </div>
+
+        {!lockAspect && (
+          <div className="form__row">
+            <span />
+            <Checkbox checked={keepRatio} onChange={setKeepRatio} label={t('furniture.keepRatio')} />
+          </div>
+        )}
 
         {presets && (
           <div className="form__row form__row--presets">
@@ -706,7 +718,7 @@ function FurnitureInspector({ plan, item }: { plan: Plan; item: Furniture }) {
         </Button>
       </div>
       <p className="hint">
-        💡 {t('furniture.resizeHint')}
+        💡 {t(touch ? 'furniture.resizeHintTouch' : 'furniture.resizeHint')}
       </p>
     </aside>
   )

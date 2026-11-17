@@ -38,7 +38,7 @@ export function FurniturePanel() {
     const { plan, cam, commit, selectFurniture, setTool } = usePlanStore.getState()
     if (!plan) return
     const center = cam
-      ? toWorld(cam, { x: window.innerWidth / 2, y: window.innerHeight / 2 })
+      ? toWorld(cam, { x: window.innerWidth / 2, y: window.innerHeight * (window.innerWidth <= 760 ? 0.3 : 0.5) })
       : { x: plan.site.width / 2, y: plan.site.depth / 2 }
     const size = resolveFurniture({ type })
     const at = freeSpot(plan, center, size.w, size.d)

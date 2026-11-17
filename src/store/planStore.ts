@@ -34,6 +34,8 @@ export type PlanState = {
   exitPreview: () => Plan | null
   showDims: boolean
   setShowDims: (on: boolean) => void
+  keepRatio: boolean
+  setKeepRatio: (on: boolean) => void
   summaryTab: 'general' | 'materials'
   setSummaryTab: (t: 'general' | 'materials') => void
   summaryOpen: boolean
@@ -78,6 +80,7 @@ export const usePlanStore = create<PlanState>()(
         aligning: false,
         versionPreview: null,
         showDims: false,
+        keepRatio: false,
         summaryTab: 'general',
         summaryOpen: false,
         doorPreset: 'entry',
@@ -115,6 +118,7 @@ export const usePlanStore = create<PlanState>()(
           return vp.real
         },
         setShowDims: (showDims) => set({ showDims }),
+        setKeepRatio: (keepRatio) => set({ keepRatio }),
         setSummaryTab: (summaryTab) => set({ summaryTab }),
         setSummaryOpen: (summaryOpen) => set({ summaryOpen }),
         setDoorPreset: (doorPreset) => set({ doorPreset }),
@@ -218,7 +222,7 @@ export const usePlanStore = create<PlanState>()(
         name: 'house-planner:ui',
         version: 2,
         storage: createJSONStorage(() => localStorage),
-        partialize: (s) => ({ tool: s.tool, activeMaterialId: s.activeMaterialId, cam: s.cam, underlay: s.underlay, doorPreset: s.doorPreset, furniturePanel: s.furniturePanel, summaryTab: s.summaryTab, showDims: s.showDims }),
+        partialize: (s) => ({ tool: s.tool, activeMaterialId: s.activeMaterialId, cam: s.cam, underlay: s.underlay, doorPreset: s.doorPreset, furniturePanel: s.furniturePanel, summaryTab: s.summaryTab, showDims: s.showDims, keepRatio: s.keepRatio }),
       },
     ),
     {

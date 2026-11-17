@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { Circle, Layer, Line, Stage } from 'react-konva'
 import type Konva from 'konva'
 import { useTranslation } from 'react-i18next'
@@ -92,6 +92,7 @@ const fitPadding = (el?: HTMLElement | null) => {
 const DEFAULT_CAM: Camera = { x: 0, y: 0, scale: 0.05 }
 const DRAG_THRESHOLD_PX = 3
 const WALL_SNAP_PX = 12
+const FUR_NODE_PREFIX = 'fur:'
 
 /**
  * Drop placement: if the drop point is within reach of a wall, turn the item so
@@ -617,8 +618,8 @@ export function PlanCanvas({ onCursor }: Props) {
         vMin = Math.min(vMax - MIN_SIZE, snapDim(v))
       }
 
-      // Proportional resize: Alt, or always for round symbols (lockAspect).
-      if ((alt || r.def?.lockAspect) && w0 > 0 && d0 > 0) {
+      // Proportional resize: Alt, the inspector's "Keep proportions" toggle (touch), or always for round symbols.
+      if ((alt || r.def?.lockAspect || usePlanStore.getState().keepRatio) && w0 > 0 && d0 > 0) {
         const ratio = w0 / d0
         const corner = handle.length === 2
         let lw: number
@@ -843,6 +844,53 @@ export function PlanCanvas({ onCursor }: Props) {
     return true
   }
 
+  // Furniture event handlers are created once and read the latest closures
+  // through a ref, so FurnitureSymbol2D's memo holds: while one item is
+  // dragged, the other items are not re-rendered on every pointer move.
+  const furLatest = useRef<{ groupPick: (k: SelKind, id: string, s: boolean) => boolean; selectFurniture: typeof selectFurniture; startDrag: typeof startDrag }>({
+    groupPick: () => false,
+    selectFurniture,
+    startDrag,
+  })
+  useLayoutEffect(() => {
+    furLatest.current = { groupPick: (k, id, s) => groupPick(k, id, s), selectFurniture, startDrag }
+  })
+  const furnitureEvents = useMemo(() => {
+    const idOf = (e: KonvaEventObject<Event>) => String(e.currentTarget.id()).slice(FUR_NODE_PREFIX.length)
+    const press = (e: KonvaEventObject<MouseEvent | TouchEvent>, shift: boolean) => {
+      e.cancelBubble = true
+      const id = idOf(e)
+      const l = furLatest.current
+      if (l.groupPick('furniture', id, shift)) return
+      l.selectFurniture(id)
+      l.startDrag('fur-move', '', undefined, id)
+    }
+    const select = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      e.cancelBubble = true
+      furLatest.current.selectFurniture(idOf(e))
+    }
+    const cursor = (value: string) => (e: KonvaEventObject<MouseEvent>) => {
+      const st = e.target.getStage()
+      if (st) st.container().style.cursor = value
+    }
+    return {
+      onMouseDown: (e: KonvaEventObject<MouseEvent>) => {
+        if (e.evt.button !== 0) return
+        press(e, e.evt.shiftKey)
+      },
+      onTouchStart: (e: KonvaEventObject<TouchEvent>) => press(e, false),
+      onClick: select,
+      onTap: select,
+      onMouseEnter: cursor('move'),
+      onMouseLeave: cursor(''),
+    }
+  }, [])
+  const sortedFurniture = useMemo(
+    () => [...(shown?.furniture ?? [])].sort((a, b) => furnitureLayer(a.type) - furnitureLayer(b.type)),
+    [shown?.furniture],
+  )
+
+
   const finishMarquee = () => {
     if (!marquee) return
     setMarquee(null)
@@ -933,6 +981,11 @@ export function PlanCanvas({ onCursor }: Props) {
   }
 
   const onStageClick = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+    // Touch: Konva fires `tap` from its own touchend, before the window
+    // touchend listener finishes the drag. A drag in progress means this tap
+    // ended a press on an item (which stops listening while dragged), not a
+    // tap on empty canvas — don't clear the selection.
+    if (drag) return
     if (panRef.current) {
       panRef.current = false
       return
@@ -1329,41 +1382,14 @@ export function PlanCanvas({ onCursor }: Props) {
                   worldPointer={worldPointer}
                 />
               ))}
-              {layers.furniture && [...shown.furniture].sort((a, b) => furnitureLayer(a.type) - furnitureLayer(b.type)).map((f) => (
+              {layers.furniture && sortedFurniture.map((f) => (
                 <FurnitureSymbol2D
                   key={f.id}
+                  id={FUR_NODE_PREFIX + f.id}
                   item={f}
                   selected={f.id === selectedFurnitureId || selHas(group, 'furniture', f.id)}
                   listening={tool === 'select' && !drag && !aligning && !viewOnly && !locks.furniture}
-                  onMouseDown={(e: KonvaEventObject<MouseEvent>) => {
-                    if (e.evt.button !== 0) return
-                    e.cancelBubble = true
-                    if (groupPick('furniture', f.id, e.evt.shiftKey)) return
-                    selectFurniture(f.id)
-                    startDrag('fur-move', '', undefined, f.id)
-                  }}
-                  onTouchStart={(e: KonvaEventObject<TouchEvent>) => {
-                    e.cancelBubble = true
-                    if (groupPick('furniture', f.id, false)) return
-                    selectFurniture(f.id)
-                    startDrag('fur-move', '', undefined, f.id)
-                  }}
-                  onClick={(e: KonvaEventObject<MouseEvent>) => {
-                    e.cancelBubble = true
-                    selectFurniture(f.id)
-                  }}
-                  onTap={(e: KonvaEventObject<TouchEvent>) => {
-                    e.cancelBubble = true
-                    selectFurniture(f.id)
-                  }}
-                  onMouseEnter={(e: KonvaEventObject<MouseEvent>) => {
-                    const st = e.target.getStage()
-                    if (st) st.container().style.cursor = 'move'
-                  }}
-                  onMouseLeave={(e: KonvaEventObject<MouseEvent>) => {
-                    const st = e.target.getStage()
-                    if (st) st.container().style.cursor = ''
-                  }}
+                  {...furnitureEvents}
                 />
               ))}
               {layers.walls && shown.walls.map((w) => (

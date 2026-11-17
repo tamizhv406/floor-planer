@@ -179,7 +179,9 @@
       "ceiling-fan": "Ceiling fan"
     },
     "presets": "Presets",
-    "resizeHint": "Drag edge or corner handles to resize (50 mm step, Shift — 10 mm). Alt keeps proportions; round items always do. Details such as armrests, chairs and treads keep their real size."
+    "resizeHint": "Drag edge or corner handles to resize (50 mm step, Shift — 10 mm). Alt keeps proportions; round items always do. Details such as armrests, chairs and treads keep their real size.",
+    "keepRatio": "Keep proportions",
+    "resizeHintTouch": "Drag edge or corner handles to resize in 50 mm steps. Turn on Keep proportions to scale evenly; round items always do. Details such as armrests, chairs and treads keep their real size."
   },
   "furniturePanel": {
     "eyebrow": "Catalog",
